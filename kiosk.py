@@ -26,6 +26,9 @@ def detect_faces():
         print("Error: Could not load Haar cascade file!")
         return
 
+    # Threshold for face width (in pixels) for ~1 meter distance
+    distance_threshold = 150  # Adjust after calibration
+
     while not face_detected:
         ret, frame = cap.read()
         if not ret:
@@ -36,9 +39,13 @@ def detect_faces():
         faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
         
         if len(faces) > 0:
-            print("Face detected!")
-            face_detected = True
-            break
+            # Find the largest face by width
+            largest_face_width = max([w for (x, y, w, h) in faces])
+            print(f"Detected face width: {largest_face_width} pixels")
+            if largest_face_width > distance_threshold:
+                print("Face detected within 1 meter!")
+                face_detected = True
+                break
         
         time.sleep(0.1)
     
