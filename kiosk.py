@@ -8,12 +8,11 @@ import platform
 # Set up paths (cross-platform)
 video_path = os.path.join("videos", "welcome.mp4")
 cascade_path = os.path.join("haarcascades", "haarcascade_frontalface_default.xml")
-spa_url = "https://www.google.com"  # Replace with your spa website URL later
+spa_url = "https://meghavi-kiosk-outlet.onrender.com/#/shop/67e22caf39c9f87925bea576"  # Replace with your spa website URL later
 
-# A flag to tell us when a face is detected
+# A flag to control video playback and face detection
 face_detected = False
 
-# Function to detect faces using the webcam
 def detect_faces():
     global face_detected
     cap = cv2.VideoCapture(0)
@@ -27,9 +26,9 @@ def detect_faces():
         return
 
     # Threshold for face width (in pixels) for ~1 meter distance
-    distance_threshold = 150  # Adjust after calibration
+    distance_threshold = 150  # Adjust based on your calibration
 
-    while not face_detected:
+    while True:
         ret, frame = cap.read()
         if not ret:
             print("Error: Could not read from webcam!")
@@ -43,32 +42,46 @@ def detect_faces():
             largest_face_width = max([w for (x, y, w, h) in faces])
             print(f"Detected face width: {largest_face_width} pixels")
             if largest_face_width > distance_threshold:
-                print("Face detected within 1 meter!")
-                face_detected = True
-                break
+                if not face_detected:
+                    print("Face detected within 1 meter!")
+                    face_detected = True
+        else:
+            if face_detected:
+                print("No face detected, returning to video playback...")
+                face_detected = False
         
         time.sleep(0.1)
     
     cap.release()
 
 # Main program
-print("Starting video playback...")
-if platform.system() == "Windows":
-    vlc_process = subprocess.Popen([r"C:\Program Files\VideoLAN\VLC\vlc.exe", "--loop", "--fullscreen", video_path])
-else:
-    vlc_process = subprocess.Popen(["vlc", "--loop", "--fullscreen", video_path])
+def main():
+    global face_detected
+    while True:
+        if not face_detected:
+            print("Starting video playback...")
+            if platform.system() == "Windows":
+                vlc_process = subprocess.Popen([r"C:\Program Files\VideoLAN\VLC\vlc.exe", "--loop", "--fullscreen", video_path])
+            else:
+                vlc_process = subprocess.Popen(["vlc", "--loop", "--fullscreen", video_path])
+            # Wait until a face is detected
+            while not face_detected:
+                time.sleep(1)
+            vlc_process.terminate()
+            print("Video stopped. Showing spa menu...")
+            if platform.system() == "Windows":
+                subprocess.run(["start", "chrome", "--kiosk", spa_url], shell=True)
+            else:
+                subprocess.run(["chromium-browser", "--kiosk", spa_url])
+        else:
+            # Keep checking for no faces to resume video
+            time.sleep(1)
 
+# Start face detection in a separate thread
 print("Starting face detection...")
 face_thread = threading.Thread(target=detect_faces)
+face_thread.daemon = True  # Allow program to exit even if thread is running
 face_thread.start()
 
-while not face_detected:
-    time.sleep(1)
-
-vlc_process.terminate()
-print("Video stopped. Showing spa menu...")
-
-if platform.system() == "Windows":
-    subprocess.run(["start", "chrome", "--kiosk", spa_url], shell=True)
-else:
-    subprocess.run(["chromium-browser", "--kiosk", spa_url])
+# Run main loop
+main()
