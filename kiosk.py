@@ -4,12 +4,16 @@ import subprocess
 import threading
 import time
 import platform
+import numpy as np
 
 # Set up paths (cross-platform)
-video_path = os.path.join("videos", "welcome.mp4")
-cascade_path = os.path.join("haarcascades", "haarcascade_frontalface_default.xml")
+base_dir = r"C:\Users\lokes\OneDrive\Desktop\meghavi\meghavi"
+video_path = os.path.join(base_dir, "videos", "welcome.mp4")
+model_path = os.path.join(base_dir, "dnn_model", "res10_300x300_ssd_iter_140000_fp16.caffemodel")
+config_path = os.path.join(base_dir, "dnn_model", "deploy.prototxt")
 spa_url = "https://meghavi-kiosk-outlet.onrender.com/#/shop/67e22caf39c9f87925bea576"  # Replace with your spa website URL later
 
+# Rest of the code remains unchanged
 # A flag to control video playback and face detection
 face_detected = False
 
@@ -20,13 +24,15 @@ def detect_faces():
         print("Error: Could not open webcam!")
         return
     
-    face_cascade = cv2.CascadeClassifier(cascade_path)
-    if face_cascade.empty():
-        print("Error: Could not load Haar cascade file!")
+    # Load DNN face detector
+    try:
+        net = cv2.dnn.readNetFromCaffe(config_path, model_path)
+    except Exception as e:
+        print(f"Error loading DNN model: {e}")
         return
 
     # Threshold for face width (in pixels) for ~1 meter distance
-    distance_threshold = 150  # Adjust based on your calibration
+    distance_threshold = 130  # Adjust based on your calibration
 
     while True:
         ret, frame = cap.read()
@@ -34,8 +40,20 @@ def detect_faces():
             print("Error: Could not read from webcam!")
             break
         
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+        # Prepare frame for DNN
+        h, w = frame.shape[:2]
+        blob = cv2.dnn.blobFromImage(frame, 1.0, (300, 300), (104.0, 177.0, 123.0))
+        net.setInput(blob)
+        detections = net.forward()
+
+        faces = []
+        for i in range(detections.shape[2]):
+            confidence = detections[0, 0, i, 2]
+            if confidence > 0.5:  # Confidence threshold
+                box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
+                (x, y, x2, y2) = box.astype("int")
+                face_width = x2 - x
+                faces.append((x, y, face_width, y2 - y))
         
         if len(faces) > 0:
             # Find the largest face by width
@@ -53,8 +71,17 @@ def detect_faces():
                     ret, frame = cap.read()
                     if not ret:
                         break
-                    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+                    blob = cv2.dnn.blobFromImage(frame, 1.0, (300, 300), (104.0, 177.0, 123.0))
+                    net.setInput(blob)
+                    detections = net.forward()
+                    faces = []
+                    for i in range(detections.shape[2]):
+                        confidence = detections[0, 0, i, 2]
+                        if confidence > 0.5:
+                            box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
+                            (x, y, x2, y2) = box.astype("int")
+                            face_width = x2 - x
+                            faces.append((x, y, face_width, y2 - y))
                     if len(faces) > 0:
                         largest_face_width = max([w for (x, y, w, h) in faces])
                         if largest_face_width > distance_threshold:
