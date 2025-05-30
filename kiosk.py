@@ -41,20 +41,35 @@ def detect_faces():
             # Find the largest face by width
             largest_face_width = max([w for (x, y, w, h) in faces])
             print(f"Detected face width: {largest_face_width} pixels")
-            if largest_face_width > distance_threshold:
-                if not face_detected:
-                    print("Face detected within 1 meter!")
-                    face_detected = True
+            if largest_face_width > distance_threshold and not face_detected:
+                print("Face detected within 1 meter!")
+                face_detected = True
         else:
             if face_detected:
-                print("No face detected, returning to video playback...")
-                face_detected = False
+                # Wait 5 seconds to confirm no face is detected
+                print("No face detected, waiting 5 seconds...")
+                no_face_start = time.time()
+                while time.time() - no_face_start < 5:
+                    ret, frame = cap.read()
+                    if not ret:
+                        break
+                    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+                    if len(faces) > 0:
+                        largest_face_width = max([w for (x, y, w, h) in faces])
+                        if largest_face_width > distance_threshold:
+                            print("Face re-detected within 5 seconds, staying on website!")
+                            break
+                    time.sleep(0.1)
+                else:
+                    # No face detected for 5 seconds, reset to video
+                    print("No face for 5 seconds, returning to video playback...")
+                    face_detected = False
         
         time.sleep(0.1)
     
     cap.release()
 
-# Main program
 def main():
     global face_detected
     while True:
@@ -74,8 +89,14 @@ def main():
             else:
                 subprocess.run(["chromium-browser", "--kiosk", spa_url])
         else:
-            # Keep checking for no faces to resume video
+            # Wait for face detection to signal no face
             time.sleep(1)
+            if not face_detected:
+                # Close browser when returning to video
+                if platform.system() == "Windows":
+                    subprocess.run(["taskkill", "/IM", "chrome.exe", "/F"], shell=True)
+                else:
+                    subprocess.run(["pkill", "chromium"], shell=True)
 
 # Start face detection in a separate thread
 print("Starting face detection...")
